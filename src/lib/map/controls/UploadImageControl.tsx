@@ -15,7 +15,6 @@ import GroupIcon from '@mui/icons-material/Group';
 import GroupOffIcon from '@mui/icons-material/GroupOff';
 import { Style, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
 import PointerInteraction from 'ol/interaction/Pointer';
-import type { FeatureLike } from 'ol/Feature';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -27,16 +26,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import FilterBAndWIcon from '@mui/icons-material/FilterBAndW';
 import RestoreIcon from '@mui/icons-material/Restore';
 import SaveIcon from '@mui/icons-material/Save';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
-import EditIcon from '@mui/icons-material/Edit';
-import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
-import TimelineIcon from '@mui/icons-material/Timeline';
-import ChangeHistoryIcon from '@mui/icons-material/ChangeHistory';
-import CropSquareIcon from '@mui/icons-material/CropSquare';
-import PanoramaFishEyeIcon from '@mui/icons-material/PanoramaFishEye';
-import GestureIcon from '@mui/icons-material/Gesture';
-import Draw, { createBox } from 'ol/interaction/Draw.js';
+import type { FeatureLike } from 'ol/Feature';
 
 interface UploadedImage {
   id: string;
@@ -72,21 +62,15 @@ export const UploadImageControl: React.FC<UploadImageControlProps> = ({ map }) =
   const [editCanvasUrl, setEditCanvasUrl] = useState<string | null>(null);
   const [editState, setEditState] = useState({ rotate: 0, grayscale: false, skewX: 0, skewY: 0 });
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [drawType, setDrawType] = useState<string | null>(null);
-  const [drawInteraction, setDrawInteraction] = useState<Draw | null>(null);
-  const drawLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
 
   // Helper: generate unique id
   const genId = () => Math.random().toString(36).substring(2, 10);
 
-  // Helper: get image by id
-  const getImageById = (id: string) => images.find(img => img.id === id);
-
   // Helper: get group by marker
-  const getGroupByMarker = (marker: any) => groups.find(g => g.groupMarker === marker);
-
-  // Helper: get group by image id
-  const getGroupByImageId = (id: string) => groups.find(g => g.imageIds.includes(id));
+  const getGroupByMarker = (marker: FeatureLike) => {
+    if (!(marker instanceof Feature) || !(marker.getGeometry() instanceof Point)) return undefined;
+    return groups.find(g => g.groupMarker === marker);
+  };
 
   // Handle upload multiple images
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -149,7 +133,7 @@ export const UploadImageControl: React.FC<UploadImageControlProps> = ({ map }) =
   // Handle marker click (select/deselect)
   React.useEffect(() => {
     map.getInteractions().forEach(inter => {
-      if ((inter as any)._isMarkerSelect) map.removeInteraction(inter);
+      if ((inter as { _isMarkerSelect?: boolean })._isMarkerSelect) map.removeInteraction(inter);
     });
     const selectInteraction = new PointerInteraction({
       handleDownEvent: (evt) => {
@@ -181,7 +165,7 @@ export const UploadImageControl: React.FC<UploadImageControlProps> = ({ map }) =
         return false;
       },
     });
-    (selectInteraction as any)._isMarkerSelect = true;
+    (selectInteraction as { _isMarkerSelect?: boolean })._isMarkerSelect = true;
     map.addInteraction(selectInteraction);
     return () => {
       map.removeInteraction(selectInteraction);
@@ -417,7 +401,7 @@ export const UploadImageControl: React.FC<UploadImageControlProps> = ({ map }) =
       },
     });
 
-    (dragInteraction as any)._isMarkerDrag = true;
+    (dragInteraction as { _isMarkerDrag?: boolean })._isMarkerDrag = true;
     map.addInteraction(dragInteraction);
     markerDragInteractionsRef.current.push(dragInteraction);
   }, [images, groups, selectedIds]);
@@ -435,8 +419,7 @@ export const UploadImageControl: React.FC<UploadImageControlProps> = ({ map }) =
 
   // Add this effect after component definition
   React.useEffect(() => {
-    const clickListener = (evt: any) => {
-      const feature = map.forEachFeatureAtPixel(evt.pixel, f => f);
+    const clickListener = () => {
       // Map click event for debugging group marker detection
     };
     map.on('click', clickListener);
@@ -513,50 +496,6 @@ export const UploadImageControl: React.FC<UploadImageControlProps> = ({ map }) =
     setEditCanvasUrl(null);
   };
 
-  // Add draw layer once
-  React.useEffect(() => {
-    if (!drawLayerRef.current) {
-      const drawSource = new VectorSource();
-      const drawLayer = new VectorLayer({ source: drawSource, zIndex: 500 });
-      map.addLayer(drawLayer);
-      drawLayerRef.current = drawLayer;
-    }
-  }, [map]);
-
-  // Handle draw type change
-  React.useEffect(() => {
-    if (drawInteraction) {
-      map.removeInteraction(drawInteraction);
-      setDrawInteraction(null);
-    }
-    if (!drawType || !drawLayerRef.current) return;
-    let type = drawType;
-    let freehand = false;
-    if (drawType === 'Rectangle') {
-      type = 'Circle'; // OpenLayers uses Circle with geometryFunction for rectangle
-    }
-    if (drawType === 'Freehand') {
-      type = 'Polygon';
-      freehand = true;
-    }
-    const interaction = new Draw({
-      source: drawLayerRef.current.getSource()!,
-      type: type as 'Point' | 'LineString' | 'Polygon' | 'Circle',
-      freehand,
-      geometryFunction: drawType === 'Rectangle'
-        ? createBox()
-        : undefined,
-    });
-    map.addInteraction(interaction);
-    setDrawInteraction(interaction);
-    // Auto-disable after drawing one shape
-    interaction.on('drawend', () => {
-      setDrawType(null);
-      map.removeInteraction(interaction);
-      setDrawInteraction(null);
-    });
-  }, [drawType, map]);
-
   return (
     <>
       {/* Image Edit Dialog */}
@@ -617,22 +556,6 @@ export const UploadImageControl: React.FC<UploadImageControlProps> = ({ map }) =
             Un-group
           </Button>
         ))}
-      </Box>
-      {/* Drawing Shape Controls */}
-      <Box sx={{ position: 'absolute', top: 16, left: 16, zIndex: 1200, background: '#fff', borderRadius: 1, p: 1, boxShadow: 2 }}>
-        <ToggleButtonGroup
-          value={drawType}
-          exclusive
-          onChange={(_, val) => setDrawType(val)}
-          size="small"
-        >
-          <ToggleButton value="Point" title="Draw Point"><RadioButtonUncheckedIcon /></ToggleButton>
-          <ToggleButton value="LineString" title="Draw Line"><TimelineIcon /></ToggleButton>
-          <ToggleButton value="Polygon" title="Draw Polygon"><ChangeHistoryIcon /></ToggleButton>
-          <ToggleButton value="Rectangle" title="Draw Rectangle"><CropSquareIcon /></ToggleButton>
-          <ToggleButton value="Circle" title="Draw Circle"><PanoramaFishEyeIcon /></ToggleButton>
-          <ToggleButton value="Freehand" title="Draw Freehand Polygon"><GestureIcon /></ToggleButton>
-        </ToggleButtonGroup>
       </Box>
     </>
   );

@@ -7,6 +7,7 @@ import type View from 'ol/View';
 import type VectorSource from 'ol/source/Vector';
 import type { StyleLike } from 'ol/style/Style';
 import type { Coordinate } from 'ol/coordinate';
+import type { ProjectionEnum } from './utils';
 
 export interface MapOptions {
   center?: Coordinate;
@@ -16,6 +17,7 @@ export interface MapOptions {
   layers?: Layer[];
   className?: string;
   style?: CSSProperties;
+  projection?: ProjectionEnum;
 }
 
 export interface MapInstance {
