@@ -3,12 +3,13 @@ import Map from 'ol/Map';
 import View from 'ol/View';
 import { type MapOptions } from '../../types';
 import { SearchControl } from '../../controls/SearchControl';
-import { LayerSwitcher, UploadImageControl } from '../../controls';
+import { LayerSwitcher } from '../../controls';
 import { DrawFeatureControl } from '../../controls/DrawFeatureControl';
 import { createDefaultControls } from '../../utils/controls';
 import { createDefaultInteractions } from '../../utils/interactions';
 import { Box } from '@mui/material';
 import { ProjectionEnum } from '../../utils';
+import { UploadImageControl } from '../../controls/UploadImageControl';
 
 export const MapComponent: React.FC<MapOptions> = ({
   center = [0, 0],

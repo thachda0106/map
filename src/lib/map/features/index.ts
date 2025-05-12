@@ -1,6 +1,10 @@
-export * from './rectangle';
-export * from './polygon';
-export * from './line';
-export * from './point';
-export * from './freehand';
-export * from './circle';
+export * from './types';
+export * from './factory';
+
+// Export all feature styles
+export * from './point/PointStyle';
+export * from './line/LineStyle';
+export * from './polygon/PolygonStyle';
+export * from './rectangle/RectangleStyle';
+export * from './circle/CircleStyle';
+export * from './freehand/FreehandStyle';

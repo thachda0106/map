@@ -1,8 +1,8 @@
-import React, { useRef, useState } from 'react';
-import type Map from 'ol/Map';
+import React, { useRef, useState, useEffect } from 'react';
+import Map from 'ol/Map';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
-import Draw, { createBox } from 'ol/interaction/Draw.js';
+import Draw from 'ol/interaction/Draw.js';
 import Box from '@mui/material/Box';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
@@ -12,139 +12,109 @@ import ChangeHistoryIcon from '@mui/icons-material/ChangeHistory';
 import CropSquareIcon from '@mui/icons-material/CropSquare';
 import PanoramaFishEyeIcon from '@mui/icons-material/PanoramaFishEye';
 import GestureIcon from '@mui/icons-material/Gesture';
-import { Style, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
 import type { Geometry } from 'ol/geom';
 import { Point, LineString, Polygon, Circle } from 'ol/geom';
 import type { Feature } from 'ol';
+import type { DrawFeatureType } from '../features/types';
+import { createDrawFeatureOptions } from '../features/factory';
 
 interface DrawFeatureControlProps {
   map: Map;
 }
 
 export const DrawFeatureControl: React.FC<DrawFeatureControlProps> = ({ map }) => {
-  const [drawType, setDrawType] = useState<string | null>(null);
-  const [drawInteraction, setDrawInteraction] = useState<Draw | null>(null);
+  const [drawType, setDrawType] = useState<DrawFeatureType | null>(null);
   const drawLayerRef = useRef<VectorLayer<VectorSource> | null>(null);
+  const drawSourceRef = useRef<VectorSource | null>(null);
+  const drawInteractionRef = useRef<Draw | null>(null);
 
-  // Add draw layer once
-  React.useEffect(() => {
+  // Initialize draw layer and source
+  useEffect(() => {
     if (!drawLayerRef.current) {
       const drawSource = new VectorSource();
       const drawLayer = new VectorLayer({ 
         source: drawSource, 
-        zIndex: 9999,
-        style: new Style({
-          fill: new Fill({
-            color: 'rgba(255, 255, 255, 0.2)',
-          }),
-          stroke: new Stroke({
-            color: '#ff0000',
-            width: 3,
-          }),
-          image: new CircleStyle({
-            radius: 7,
-            fill: new Fill({
-              color: '#ff0000',
-            }),
-          }),
-        }),
+        zIndex: 999999,
+        properties: {
+          name: 'drawLayer'
+        }
       });
       map.addLayer(drawLayer);
       drawLayerRef.current = drawLayer;
-      console.log('Draw layer added:', drawLayer);
-
-      // Add click handler for features
-      map.on('click', (evt) => {
-        const feature = map.forEachFeatureAtPixel(evt.pixel, (feature) => feature);
-        if (feature) {
-          console.log('Clicked feature:', feature);
-          evt.preventDefault();
-        }
-      });
+      drawSourceRef.current = drawSource;
     }
+
+    return () => {
+      if (drawLayerRef.current) {
+        map.removeLayer(drawLayerRef.current);
+      }
+      if (drawInteractionRef.current) {
+        map.removeInteraction(drawInteractionRef.current);
+      }
+    };
   }, [map]);
 
-  // Handle draw type change
-  React.useEffect(() => {
-    if (drawInteraction) {
-      map.removeInteraction(drawInteraction);
-      setDrawInteraction(null);
-    }
-    if (!drawType || !drawLayerRef.current) return;
-
-    console.log('Creating draw interaction for type:', drawType);
-    let type = drawType;
-    let freehand = false;
-    if (drawType === 'Rectangle') {
-      type = 'Circle'; // OpenLayers uses Circle with geometryFunction for rectangle
-    }
-    if (drawType === 'Freehand') {
-      type = 'Polygon';
-      freehand = true;
+  // Handle draw type changes
+  useEffect(() => {
+    // Remove existing draw interaction if any
+    if (drawInteractionRef.current) {
+      map.removeInteraction(drawInteractionRef.current);
+      drawInteractionRef.current = null;
     }
 
-    const source = drawLayerRef.current.getSource();
-    if (!source) {
-      console.error('Draw source is null');
+    if (!drawType || !drawSourceRef.current) {
       return;
     }
 
+    // Get draw options for the selected type
+    const options = createDrawFeatureOptions(drawType);
+
+    // Create new draw interaction
     const interaction = new Draw({
-      source: source,
-      type: type as 'Point' | 'LineString' | 'Polygon' | 'Circle',
-      freehand,
-      geometryFunction: drawType === 'Rectangle'
-        ? createBox()
-        : undefined,
-      style: new Style({
-        fill: new Fill({
-          color: 'rgba(255, 255, 255, 0.2)',
-        }),
-        stroke: new Stroke({
-          color: '#ff0000',
-          width: 3,
-        }),
-        image: new CircleStyle({
-          radius: 7,
-          fill: new Fill({
-            color: '#ff0000',
-          }),
-        }),
-      }),
+      source: drawSourceRef.current,
+      ...options
     });
 
-    // Add event listeners for debugging
-    interaction.on('drawstart', (event) => {
-      console.log('Draw started:', event);
-    });
-
+    // Add event listeners
     interaction.on('drawend', (event) => {
-      console.log('Draw ended:', event);
       const feature = event.feature as Feature<Geometry>;
-      console.log('Drawn feature:', feature);
       const geometry = feature.getGeometry();
-      console.log('Feature geometry:', geometry);
       if (geometry) {
         if (geometry instanceof Point || 
             geometry instanceof LineString || 
             geometry instanceof Polygon || 
             geometry instanceof Circle) {
-          console.log('Feature coordinates:', geometry.getCoordinates());
+          console.log('Drawn feature coordinates:', geometry.getCoordinates());
         }
       }
-      console.log('Feature count in source:', source.getFeatures().length);
+
+      // Reset draw type
       setDrawType(null);
-      map.removeInteraction(interaction);
-      setDrawInteraction(null);
     });
 
+    // Add the interaction to the map
     map.addInteraction(interaction);
-    setDrawInteraction(interaction);
-    console.log('Draw interaction added:', interaction);
+    drawInteractionRef.current = interaction;
+
+    // Disable default interactions while drawing
+    const defaultInteractions = map.getInteractions().getArray();
+    defaultInteractions.forEach(i => {
+      if (i !== interaction) {
+        i.setActive(false);
+      }
+    });
+
+    return () => {
+      // Re-enable default interactions when done
+      defaultInteractions.forEach(i => {
+        if (i !== interaction) {
+          i.setActive(true);
+        }
+      });
+    };
   }, [drawType, map]);
 
-  const handleDrawTypeChange = (event: React.MouseEvent<HTMLElement>, newType: string | null) => {
-    console.log('Draw type changed to:', newType);
+  const handleDrawTypeChange = (event: React.MouseEvent<HTMLElement>, newType: DrawFeatureType | null) => {
     setDrawType(newType);
   };
 

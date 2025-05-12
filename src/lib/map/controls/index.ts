@@ -1,5 +1,5 @@
-export { UploadImageControl } from './UploadImageControl';
-export { DrawFeatureControl } from './DrawFeatureControl';
-export { LayerSwitcher } from './LayerSwitcher';
-export { SearchControl } from './SearchControl';
+export * from './factory';
+export * from './DrawFeatureControl';
+export * from './LayerSwitcher';
+export * from './SearchControl';
 // Add more controls as needed 
